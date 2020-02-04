@@ -1,0 +1,7 @@
+**/Mask_RCNN-master/
+**/dataset/
+**/logs/
+**/logs
+**/visual/
+**/*.pyc
+**/.ipynb_checkpoints/
