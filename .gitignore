@@ -5,3 +5,5 @@
 **/visual/
 **/*.pyc
 **/.ipynb_checkpoints/
+**/utils/coco/
+**/utils/CJsonObject/

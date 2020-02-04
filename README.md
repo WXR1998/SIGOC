@@ -1,6 +1,7 @@
-# SceneInfoDetect
+# Scene Information Guided Object Classification
 
 基于场景信息的物体识别
+
 清华大学 计算机系 毕业设计
 
 ## 目录结构
