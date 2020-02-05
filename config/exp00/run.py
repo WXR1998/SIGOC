@@ -6,6 +6,8 @@ import imgaug
 import shutil
 import skimage.io as io
 import json
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import random
 import argparse
@@ -23,6 +25,7 @@ import dataset_tool.categories as categories
 from dataset_tool.settings import *
 from s3d import *
 import utils
+import visualize
 
 COCO_PATH = '/home/xuanrun/Scene/logs/coco/mask_rcnn_coco.h5'
 
@@ -69,7 +72,7 @@ def train(model):
 #  Evaluation Tools
 ############################################################
 
-def test(model, config, limit = None):
+def test(model, config, limit = None, savefiledir = None):
     dataset_test = S3DDataset()
     dataset_test.load_s3d('test')
     dataset_test.prepare()
@@ -104,21 +107,33 @@ def test(model, config, limit = None):
         # print(class_ids.shape, gt_class_ids.shape)
         # print(scores.shape)
         
-        # 基础的结果
-        basemAP, precisions, recalls, overlaps = utils.compute_ap(gt_bbox, gt_class_ids, gt_mask, bbox, class_ids, scores, mask)
-        delta = 0.0
+        @timer
+        def secondClassResults():
+            # 基础的结果
+            basemAP, precisions, recalls, overlaps = utils.compute_ap(gt_bbox, gt_class_ids, gt_mask, bbox, class_ids, scores, mask)
+            delta = 0.0
 
-        # 计入概率次高分类之后的结果
-        for i in range(len(class_ids)):
-            ori = class_ids[i]
-            class_ids[i] = second_class_ids[i]
-            mAP, precisions, recalls, overlaps = utils.compute_ap(gt_bbox, gt_class_ids, gt_mask, bbox, class_ids, scores, mask)
-            class_ids[i] = ori
-            if mAP - basemAP > 0:
-                delta += mAP - basemAP
+            # 计入概率次高分类之后的结果
+            for i in range(len(class_ids)):
+                ori = class_ids[i]
+                class_ids[i] = second_class_ids[i]
+                mAP, precisions, recalls, overlaps = utils.compute_ap(gt_bbox, gt_class_ids, gt_mask, bbox, class_ids, scores, mask)
+                class_ids[i] = ori
+                if mAP - basemAP > 0:
+                    delta += mAP - basemAP
 
-        if mAP >= 0 and mAP <= 1:
-            APs.append(basemAP + delta)
+            if mAP >= 0 and mAP <= 1:
+                APs.append(basemAP + delta)
+        
+        # @timer
+        def basicResults():
+            basemAP, precisions, recalls, overlaps = utils.compute_ap(gt_bbox, gt_class_ids, gt_mask, bbox, class_ids, scores, mask)
+            if basemAP >= 0 and basemAP <= 1:
+                APs.append(basemAP)
+            visualize.display_instances(image, gt_bbox, gt_mask, gt_class_ids, [categories.category2name(i) for i in range(categories.cate_cnt)], savefilename=os.path.join(savefiledir, 'visual', '%05d_A.jpg' % i))
+            visualize.display_instances_second_class(image, bbox, mask, class_ids, second_class_ids, [categories.category2name(i) for i in range(categories.cate_cnt)], scores, second_scores, savefilename=os.path.join(savefiledir, 'visual', '%05d_B.jpg' % i))
+
+        basicResults()
     
     print('%.3f' % np.mean(APs))
 
@@ -180,7 +195,7 @@ def main():
     if args.command == 'train':
         train(model)
     else:
-        test(model, config, args.limit)
+        test(model, config, args.limit, args.logs)
 
 if __name__ == '__main__':
     main()

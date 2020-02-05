@@ -87,15 +87,30 @@ class S3DDataset(utils.Dataset):
         instance_map = io.imread(os.path.join(self.full_path(image_id), "instance.png")) # [height, width]
 
         h, w = instance_map.shape
-        res = np.zeros((h, w, len(instance_bbox2d)), dtype=np.uint16)
+        # res = np.zeros((h, w, len(instance_bbox2d)), dtype=np.uint16)
+        results = []
 
+        # 筛去classid为0(BG)和为6(sofa)的
         instance_count = 0
         class_ids = []
         for ins in instance_bbox2d:
-            res[:, :, instance_count] = instance_map == int(ins)
-            instance_count += 1
-            class_ids.append(int(idcate_map[ins]))
-        return res.astype(np.bool), np.array(class_ids, dtype=np.uint8)
+            res = (instance_map == int(ins))
+            # res[:, :, instance_count] = instance_map == int(ins)
+            label = int(idcate_map[ins])
+            if label != 0 and label != 6:
+                instance_count += 1
+                class_ids.append(label)
+                results.append(res)
+            # class_ids.append(int(idcate_map[ins]))
+        
+        results = np.array(results)
+        assert results.shape[0] == instance_count
+
+        if len(results.shape) == 3:
+            results = results.transpose(1, 2, 0)
+        else:
+            results = np.zeros((h, w, 0), dtype=np.uint16)
+        return results.astype(np.bool), np.array(class_ids, dtype=np.uint8)
 
     def load_image(self, image_id):
         """

@@ -15,6 +15,8 @@ import colorsys
 
 import numpy as np
 from skimage.measure import find_contours
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import patches,  lines
 from matplotlib.patches import Polygon
@@ -84,7 +86,7 @@ def display_instances(image, boxes, masks, class_ids, class_names,
                       scores=None, title="",
                       figsize=(16, 16), ax=None,
                       show_mask=True, show_bbox=True,
-                      colors=None, captions=None):
+                      colors=None, captions=None, savefilename=None):
     """
     boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
     masks: [height, width, num_instances]
@@ -163,14 +165,18 @@ def display_instances(image, boxes, masks, class_ids, class_names,
             p = Polygon(verts, facecolor="none", edgecolor=color)
             ax.add_patch(p)
     ax.imshow(masked_image.astype(np.uint8))
-    if auto_show:
+    if savefilename is not None:
+        plt.savefig(savefilename)
+        plt.cla()
+        plt.close("all")
+    elif auto_show:
         plt.show()
 
 def display_instances_second_class(image, boxes, masks, class_ids, second_class_ids, class_names,
                       scores=None, second_scores=None, title="",
                       figsize=(16, 16), ax=None,
                       show_mask=True, show_bbox=True,
-                      colors=None, captions=None):
+                      colors=None, captions=None, savefilename=None):
     """
     boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
     masks: [height, width, num_instances]
@@ -182,6 +188,7 @@ def display_instances_second_class(image, boxes, masks, class_ids, second_class_
     figsize: (optional) the size of the image
     colors: (optional) An array or colors to use with each object
     captions: (optional) A list of strings to use as captions for each object
+    savefilename: (optional) If not none, save to file
     """
     # Number of instances
     N = boxes.shape[0]
@@ -255,7 +262,11 @@ def display_instances_second_class(image, boxes, masks, class_ids, second_class_
             p = Polygon(verts, facecolor="none", edgecolor=color)
             ax.add_patch(p)
     ax.imshow(masked_image.astype(np.uint8))
-    if auto_show:
+    if savefilename is not None:
+        plt.savefig(savefilename)
+        plt.cla()
+        plt.close("all")
+    elif auto_show:
         plt.show()
 
 def display_differences(image,
