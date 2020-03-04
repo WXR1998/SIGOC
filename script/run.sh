@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=0 
+export CUDA_VISIBLE_DEVICES=0
 SHELL_FOLDER=$(cd "$(dirname "$0")";pwd)
 
 # $1:   exp_name

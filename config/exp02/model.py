@@ -1255,8 +1255,13 @@ def mrcnn_rel_loss_graph(dists, coefs):
     dists:      [batch, num_rois * num_rois] The distances between each pair of rois
     coefs:      [batch, num_rois * num_rois] The class coefficients of each pair of rois
     系数大(距离较近的可能性更高)，距离小，贡献大
+    但是如果距离大于一个阈值，更可能两个框毫无关系，所以不应该计入贡献
+
+    如果一对框的距离近，说明他们应该更有可能是coef大的pair。此时coef越大，loss应该越小
+    如果一对框的距离远，说明可能这是一对没有关联的框，此时不应计入loss
+    所以，loss和dist负相关，和coef也是负相关
     '''
-    loss = K.mean(dists * coefs)
+    loss = K.mean((1.0/tf.exp(dists)) * (1.0/tf.exp(coefs)))
     return loss
 
 ############################################################
