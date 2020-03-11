@@ -87,7 +87,7 @@ def test(model, config, limit = None, savefiledir = None):
             if i >= int(limit):
                 continue
         image, meta, gt_class_ids, gt_bbox, gt_mask = modellib.load_image_gt(dataset_test, config, i)
-        result = model.detect([image], verbose=0)[0]
+        result = model.detect([image], dataset_test.load_rel_coefs(), verbose=0)[0]
 
         bbox = result['rois']
         mask = result['masks']
@@ -96,17 +96,28 @@ def test(model, config, limit = None, savefiledir = None):
         second_class_ids = result['second_class_ids']
         second_scores = result['second_scores']
         probs = result['probs'][0]
+        dists = result['dists']
+        coefs = result['coefs']
 
-        # print(class_ids)
-        # print(second_class_ids)
-        # print(scores)
-        # print(second_scores)
+        def drawfig():
+            fig = plt.figure(figsize=(16, 16))
 
-        # print(bbox.shape, gt_bbox.shape)
-        # print(mask.shape, gt_mask.shape)
-        # print(class_ids.shape, gt_class_ids.shape)
-        # print(scores.shape)
-        
+            ax = fig.add_subplot(221)
+            im = ax.imshow(dists, cmap='Blues', interpolation='none', vmin=0, vmax=2, aspect='equal')
+            plt.colorbar(im, shrink=0.5)
+
+            ax = fig.add_subplot(222)
+            im = ax.imshow(coefs, cmap='Reds', interpolation='none', vmin=0, aspect='equal')
+            plt.colorbar(im, shrink=0.5)
+
+            ax = fig.add_subplot(223)
+            im = ax.imshow((1. / np.exp(dists + 2*np.eye(len(dists)))) * (1. / np.exp(coefs)), cmap='Greens', interpolation='none', vmin=0, aspect='equal')
+            plt.colorbar(im, shrink=0.5)
+
+            plt.savefig('fig.jpg')
+
+        # drawfig()
+
         # @timer
         def secondClassResults():
             # 基础的结果
@@ -135,6 +146,8 @@ def test(model, config, limit = None, savefiledir = None):
 
         basicResults()
         secondClassResults()
+
+        # exit(0)
 
     
     print('%.3f, %.3f' % (np.mean(APs1), np.mean(APs2)))

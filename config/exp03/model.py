@@ -919,6 +919,7 @@ def fpn_rel_graph(rois, roi_logits, rel_coefs,
 
     rois:   [batch, num_rois, (y1, x1, y2, x2)] Proposal boxes in normalized coordinates.
     roi_logits: [batch, num_rois, num_classes]  The classification logits result of the output of classification branch.
+                or [batch, num_rois] The classification result after argmax
     rel_coefs:  [batch, num_classes * num_classes] The relation coefficients between each pair of classes.
                 note: this array is copied on the first dimension.
     num_rois:   The global config of the number of roi regions.
@@ -949,12 +950,15 @@ def fpn_rel_graph(rois, roi_logits, rel_coefs,
     roi_y_2 = KL.Permute((2, 1), input_shape=(num_rois, num_rois))(roi_y_2)
     roi_y_2 = KL.Reshape((num_rois*num_rois, ))(roi_y_2)
     roi_dy = KL.Lambda(lambda x: K.abs(x))(KL.add([roi_y_1, KL.Lambda(lambda x: -x)(roi_y_2)]))
-    
+
     roi_dist = KL.add([roi_dx, roi_dy], name='roi_dist')
 
     # 系数大，距离小 -> loss贡献
     # [batch, num_rois]
-    cate_ix = KL.Lambda(lambda x: K.argmax(x, axis=-1))(roi_logits)     # 每个框分别是什么类别，下标
+    if len(roi_logits.shape) == 3:
+        cate_ix = KL.Lambda(lambda x: K.argmax(x, axis=-1))(roi_logits)     # 每个框分别是什么类别，下标
+    else:
+        cate_ix = KL.Lambda(lambda x: K.cast(x, dtype=tf.int32))(roi_logits)
     cate_ix_1 = KL.Lambda(lambda x: K.tile(x, (1, num_rois)))(cate_ix)
     cate_ix_2 = KL.Lambda(lambda x: K.tile(x, (1, num_rois)))(cate_ix)
     cate_ix_2 = KL.Reshape((num_rois, num_rois))(cate_ix_2)
@@ -1260,8 +1264,13 @@ def mrcnn_rel_loss_graph(dists, coefs):
     如果一对框的距离近，说明他们应该更有可能是coef大的pair。此时coef越大，loss应该越小
     如果一对框的距离远，说明可能这是一对没有关联的框，此时不应计入loss
     所以，loss和dist负相关，和coef也是负相关
+    注意，对角线的距离应该+2
     '''
-    loss = K.mean((1.0/tf.exp(dists)) * (1.0/tf.exp(coefs)))
+    from math import sqrt
+    num_rois = int(sqrt(K.int_shape(dists)[1]))
+    num_batch = K.int_shape(dists)[0]
+    
+    loss = K.mean((1.0/tf.exp(dists + tf.reshape(2*tf.eye(num_rois), (-1,)))) * (1.0/tf.exp(coefs)))
     return loss
 
 ############################################################
@@ -2140,15 +2149,19 @@ class MaskRCNN():
 
             # Create masks for detections
             detection_boxes = KL.Lambda(lambda x: x[..., :4])(detections)
+            detection_classes = KL.Lambda(lambda x: x[..., 4])(detections)
             mrcnn_mask = build_fpn_mask_graph(detection_boxes, mrcnn_feature_maps,
                                               input_image_meta,
                                               config.MASK_POOL_SIZE,
                                               config.NUM_CLASSES,
                                               train_bn=config.TRAIN_BN)
 
-            model = KM.Model([input_image, input_image_meta, input_anchors],
+            mrcnn_dists, mrcnn_coefs = fpn_rel_graph(detection_boxes, detection_classes, input_coefs, config.DETECTION_MAX_INSTANCES, config.NUM_CLASSES)
+
+            model = KM.Model([input_image, input_image_meta, input_anchors, input_coefs],
                              [detections, mrcnn_class, mrcnn_bbox,
-                                 mrcnn_mask, rpn_rois, rpn_class, rpn_bbox],
+                                 mrcnn_mask, rpn_rois, rpn_class, rpn_bbox,
+                                 mrcnn_dists, mrcnn_coefs],
                              name='mask_rcnn')
 
         # Add multi-GPU support.
@@ -2583,10 +2596,11 @@ class MaskRCNN():
 
         return boxes, class_ids, scores, full_masks, second_class_ids, second_scores
 
-    def detect(self, images, verbose=0):
+    def detect(self, images, input_coefs, verbose=0):
         """Runs the detection pipeline.
 
         images: List of images, potentially of different sizes.
+        input_coefs: [classes, classes]
 
         Returns a list of dicts, one dict per image. The dict contains:
         rois: [N, (y1, x1, y2, x2)] detection bounding boxes
@@ -2624,8 +2638,8 @@ class MaskRCNN():
             log("image_metas", image_metas)
             log("anchors", anchors)
         # Run object detection
-        detections, mrcnn_class, _, mrcnn_mask, _, _, _ =\
-            self.keras_model.predict([molded_images, image_metas, anchors], verbose=0)
+        detections, mrcnn_class, _, mrcnn_mask, _, _, _, dists, coefs =\
+            self.keras_model.predict([molded_images, image_metas, anchors, np.reshape(input_coefs, (1, -1))], verbose=0)
         # Process detections
         # MODIFIED
         results = []
@@ -2634,6 +2648,18 @@ class MaskRCNN():
                 self.unmold_detections(detections[i], mrcnn_mask[i],
                                        image.shape, molded_images[i].shape,
                                        windows[i])
+            non_bg_idx = []
+            for j in range(len(detections[i])):
+                if detections[i][j][4] > 0:
+                    non_bg_idx.append(j)
+            
+            final_dists = [[] for j in range(len(non_bg_idx))]
+            final_coefs = [[] for j in range(len(non_bg_idx))]
+            for j in range(len(non_bg_idx)):
+                for k in range(len(non_bg_idx)):
+                    final_dists[j].append(dists[i][non_bg_idx[j] * len(detections[i]) + non_bg_idx[k]])
+                    final_coefs[j].append(coefs[i][non_bg_idx[j] * len(detections[i]) + non_bg_idx[k]])
+
             results.append({
                 "rois": final_rois,
                 "class_ids": final_class_ids,
@@ -2641,7 +2667,9 @@ class MaskRCNN():
                 "second_class_ids": final_second_class_ids,
                 "second_scores": final_second_scores,
                 "masks": final_masks,
-                "probs": mrcnn_class
+                "probs": mrcnn_class,
+                "dists": final_dists,
+                "coefs": final_coefs
             })
         return results
 
