@@ -911,7 +911,7 @@ def build_rpn_model(anchor_stride, anchors_per_location, depth):
 #  Feature Pyramid Network Heads
 ############################################################
 
-def fpn_rel_graph(rois, roi_logits, rel_coefs, 
+def fpn_rel_graph(rois, roi_logits, rel_coefs, rel_bias,
                   num_rois, num_classes):
 
     """
@@ -922,12 +922,16 @@ def fpn_rel_graph(rois, roi_logits, rel_coefs,
                 or [batch, num_rois] The classification result after argmax
     rel_coefs:  [batch, num_classes * num_classes] The relation coefficients between each pair of classes.
                 note: this array is copied on the first dimension.
+    rel_bias:   [batch, num_classes * num_classes] The y-axis bias between each pair of classes.
+                note: this array is copied on the first dimension.
     num_rois:   The global config of the number of roi regions.
     num_classes:    The global config of the number of classes.
 
     Return:
-    roi_dist:   [batch, num_rois * num_rois] The distances between each pair of rois
-    coefs:      [batch, num_rois * num_rois] The class coefficients of each pair of rois
+    roi_dist_x:     [batch, num_rois * num_rois] The distances between each pair of rois on X axis
+    roi_dist_y:     [batch, num_rois * num_rois] The distances between each pair of rois on Y axis
+    coefs:          [batch, num_rois * num_rois] The class coefficients of each pair of rois
+    bias:           [batch, num_rois * num_rois]
     """
 
     # Calculate the distance between each pair of rois. 
@@ -942,16 +946,16 @@ def fpn_rel_graph(rois, roi_logits, rel_coefs,
     roi_x_2 = KL.Reshape((num_rois, num_rois))(roi_x_2)
     roi_x_2 = KL.Permute((2, 1), input_shape=(num_rois, num_rois))(roi_x_2)
     roi_x_2 = KL.Reshape((num_rois*num_rois, ))(roi_x_2)
-    roi_dx = KL.Lambda(lambda x: K.abs(x))(KL.add([roi_x_1, KL.Lambda(lambda x: -x)(roi_x_2)]))
+    roi_dx = KL.Lambda(lambda x: K.abs(x), name='roi_dist_x')(KL.add([roi_x_1, KL.Lambda(lambda x: -x)(roi_x_2)]))
 
     roi_y_1 = KL.Lambda(lambda x: K.tile(x, (1, num_rois)))(roi_y)
     roi_y_2 = KL.Lambda(lambda x: K.tile(x, (1, num_rois)))(roi_y)
     roi_y_2 = KL.Reshape((num_rois, num_rois))(roi_y_2)
     roi_y_2 = KL.Permute((2, 1), input_shape=(num_rois, num_rois))(roi_y_2)
     roi_y_2 = KL.Reshape((num_rois*num_rois, ))(roi_y_2)
-    roi_dy = KL.Lambda(lambda x: K.abs(x))(KL.add([roi_y_1, KL.Lambda(lambda x: -x)(roi_y_2)]))
+    roi_dy = KL.Lambda(lambda x: K.abs(x), name='roi_dist_y')(KL.add([roi_y_1, KL.Lambda(lambda x: -x)(roi_y_2)]))
 
-    roi_dist = KL.add([roi_dx, roi_dy], name='roi_dist')
+    # roi_dist = KL.add([roi_dx, roi_dy], name='roi_dist')
 
     # 系数大，距离小 -> loss贡献
     # [batch, num_rois]
@@ -968,10 +972,11 @@ def fpn_rel_graph(rois, roi_logits, rel_coefs,
     # [batch, num_rois * num_rois]
     cate_ix_cross = KL.add([KL.Lambda(lambda x: x * num_classes)(cate_ix_1), cate_ix_2])        # 每对roi应该使用哪个coef
     coefs = KL.Lambda(lambda x: K.tf.batch_gather(x, cate_ix_cross), name='rel_coefs')(rel_coefs)
+    bias = KL.Lambda(lambda x: K.tf.batch_gather(x, cate_ix_cross), name='rel_bias')(rel_bias)
     
     # print(roi_dist)
     # print(coefs)
-    return roi_dist, coefs
+    return roi_dx, roi_dy, coefs, bias
 
 def fpn_classifier_graph(rois, feature_maps, image_meta,
                          pool_size, num_classes, train_bn=True,
@@ -1254,10 +1259,12 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
     loss = K.mean(loss)
     return loss
 
-def mrcnn_rel_loss_graph(dists, coefs):
+def mrcnn_rel_loss_graph(dists_x, dists_y, coefs, bias):
     '''
-    dists:      [batch, num_rois * num_rois] The distances between each pair of rois
-    coefs:      [batch, num_rois * num_rois] The class coefficients of each pair of rois
+    dists_x:        [batch, num_rois * num_rois] The distances between each pair of rois X
+    dists_y:        [batch, num_rois * num_rois] The distances between each pair of rois Y
+    coefs:          [batch, num_rois * num_rois] The class coefficients of each pair of rois
+    bias:           [batch, num_rois * num_rois] The bias of each pair of rois
     系数大(距离较近的可能性更高)，距离小，贡献大
     但是如果距离大于一个阈值，更可能两个框毫无关系，所以不应该计入贡献
 
@@ -1267,10 +1274,15 @@ def mrcnn_rel_loss_graph(dists, coefs):
     注意，对角线的距离应该+2
     '''
     from math import sqrt
-    num_rois = int(sqrt(K.int_shape(dists)[1]))
-    num_batch = K.int_shape(dists)[0]
+    num_rois = int(sqrt(K.int_shape(dists_x)[1]))
+    num_batch = K.int_shape(dists_x)[0]
+
+    dists_X_mdf = dists_x + tf.reshape(tf.eye(num_rois), (-1, ))
+    dists_Y_mdf = dists_y + tf.reshape(tf.eye(num_rois), (-1, ))
+    # 对于X方向上的距离，和exp03的处理方法相同
+    # 对于Y方向上的距离，先判断他们的上/下关系
     
-    loss = K.mean((1.0/tf.exp(dists + tf.reshape(2*tf.eye(num_rois), (-1,)))) * (1.0/tf.exp(coefs)))
+    loss = K.mean((1.0/(tf.exp(dists_X_mdf + dists_Y_mdf) + 0.5 * tf.exp(dists_y * bias))) * (1.0/tf.exp(coefs)))
     return loss
 
 ############################################################
@@ -1821,6 +1833,7 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
                             rpn_rois, gt_class_ids, gt_boxes, gt_masks, config)
             
             coefs = dataset.load_rel_coefs()
+            bias = dataset.load_rel_bias()
 
             # Init batch arrays
             if b == 0:
@@ -1840,6 +1853,8 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
                     (batch_size, gt_masks.shape[0], gt_masks.shape[1],
                      config.MAX_GT_INSTANCES), dtype=gt_masks.dtype)
                 batch_coefs = np.zeros(
+                    (batch_size, config.NUM_CLASSES * config.NUM_CLASSES), dtype=np.float32)
+                batch_bias = np.zeros(
                     (batch_size, config.NUM_CLASSES * config.NUM_CLASSES), dtype=np.float32)
                 if random_rois:
                     batch_rpn_rois = np.zeros(
@@ -1871,6 +1886,7 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
             batch_gt_boxes[b, :gt_boxes.shape[0]] = gt_boxes
             batch_gt_masks[b, :, :, :gt_masks.shape[-1]] = gt_masks
             batch_coefs[b] = np.reshape(coefs, (-1, ))
+            batch_bias[b] = np.reshape(bias, (-1, ))
             if random_rois:
                 batch_rpn_rois[b] = rpn_rois
                 if detection_targets:
@@ -1883,7 +1899,7 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
             # Batch full?
             if b >= batch_size:
                 inputs = [batch_images, batch_image_meta, batch_rpn_match, batch_rpn_bbox,
-                          batch_gt_class_ids, batch_gt_boxes, batch_gt_masks, batch_coefs]
+                          batch_gt_class_ids, batch_gt_boxes, batch_gt_masks, batch_coefs, batch_bias]
                 outputs = []
 
                 if random_rois:
@@ -1955,6 +1971,7 @@ class MaskRCNN():
         input_image_meta = KL.Input(shape=[config.IMAGE_META_SIZE],
                                     name="input_image_meta")
         input_coefs = KL.Input(shape=[config.NUM_CLASSES * config.NUM_CLASSES], name="input_coefs", dtype=tf.float32)
+        input_bias = KL.Input(shape=[config.NUM_CLASSES * config.NUM_CLASSES], name="input_bias", dtype=tf.float32)
 
         if mode == "training":
             # RPN GT
@@ -2097,7 +2114,7 @@ class MaskRCNN():
                                      train_bn=config.TRAIN_BN,
                                      fc_layers_size=config.FPN_CLASSIF_FC_LAYERS_SIZE)
 
-            mrcnn_dists, mrcnn_coefs = fpn_rel_graph(rois, mrcnn_class_logits, input_coefs, config.TRAIN_ROIS_PER_IMAGE, config.NUM_CLASSES)
+            mrcnn_dists_x, mrcnn_dists_y, mrcnn_coefs, mrcnn_bias = fpn_rel_graph(rois, mrcnn_class_logits, input_coefs, input_bias, config.TRAIN_ROIS_PER_IMAGE, config.NUM_CLASSES)
 
             mrcnn_mask = build_fpn_mask_graph(rois, mrcnn_feature_maps,
                                               input_image_meta,
@@ -2120,11 +2137,11 @@ class MaskRCNN():
             mask_loss = KL.Lambda(lambda x: mrcnn_mask_loss_graph(*x), name="mrcnn_mask_loss")(
                 [target_mask, target_class_ids, mrcnn_mask])
             rel_loss = KL.Lambda(lambda x: mrcnn_rel_loss_graph(*x), name="mrcnn_rel_loss")(
-                [mrcnn_dists, mrcnn_coefs])
+                [mrcnn_dists_x, mrcnn_dists_y, mrcnn_coefs, mrcnn_bias])
 
             # Model
             inputs = [input_image, input_image_meta,
-                      input_rpn_match, input_rpn_bbox, input_gt_class_ids, input_gt_boxes, input_gt_masks, input_coefs]
+                      input_rpn_match, input_rpn_bbox, input_gt_class_ids, input_gt_boxes, input_gt_masks, input_coefs, input_bias]
             if not config.USE_RPN_ROIS:
                 inputs.append(input_rois)
             outputs = [rpn_class_logits, rpn_class, rpn_bbox,
@@ -2156,12 +2173,12 @@ class MaskRCNN():
                                               config.NUM_CLASSES,
                                               train_bn=config.TRAIN_BN)
 
-            mrcnn_dists, mrcnn_coefs = fpn_rel_graph(detection_boxes, detection_classes, input_coefs, config.DETECTION_MAX_INSTANCES, config.NUM_CLASSES)
+            mrcnn_dists_x, mrcnn_dists_y, mrcnn_coefs, mrcnn_bias = fpn_rel_graph(detection_boxes, detection_classes, input_coefs, input_bias, config.DETECTION_MAX_INSTANCES, config.NUM_CLASSES)
 
-            model = KM.Model([input_image, input_image_meta, input_anchors, input_coefs],
+            model = KM.Model([input_image, input_image_meta, input_anchors, input_coefs, input_bias],
                              [detections, mrcnn_class, mrcnn_bbox,
                                  mrcnn_mask, rpn_rois, rpn_class, rpn_bbox,
-                                 mrcnn_dists, mrcnn_coefs],
+                                 mrcnn_dists_x, mrcnn_dists_y, mrcnn_coefs, mrcnn_bias],
                              name='mask_rcnn')
 
         # Add multi-GPU support.
@@ -2596,11 +2613,12 @@ class MaskRCNN():
 
         return boxes, class_ids, scores, full_masks, second_class_ids, second_scores
 
-    def detect(self, images, input_coefs, verbose=0):
+    def detect(self, images, input_coefs, input_bias, verbose=0):
         """Runs the detection pipeline.
 
         images: List of images, potentially of different sizes.
         input_coefs: [classes, classes]
+        input_bias: [classes, classes]
 
         Returns a list of dicts, one dict per image. The dict contains:
         rois: [N, (y1, x1, y2, x2)] detection bounding boxes
@@ -2638,8 +2656,8 @@ class MaskRCNN():
             log("image_metas", image_metas)
             log("anchors", anchors)
         # Run object detection
-        detections, mrcnn_class, _, mrcnn_mask, _, _, _, dists, coefs =\
-            self.keras_model.predict([molded_images, image_metas, anchors, np.reshape(input_coefs, (1, -1))], verbose=0)
+        detections, mrcnn_class, _, mrcnn_mask, _, _, _, dists_x, dists_y, coefs, bias =\
+            self.keras_model.predict([molded_images, image_metas, anchors, np.reshape(input_coefs, (1, -1)), np.reshape(input_bias, (1, -1))], verbose=0)
         # Process detections
         # MODIFIED
         results = []
@@ -2653,12 +2671,16 @@ class MaskRCNN():
                 if detections[i][j][4] > 0:
                     non_bg_idx.append(j)
             
-            final_dists = [[] for j in range(len(non_bg_idx))]
+            final_dists_x = [[] for j in range(len(non_bg_idx))]
+            final_dists_y = [[] for j in range(len(non_bg_idx))]
             final_coefs = [[] for j in range(len(non_bg_idx))]
+            final_bias = [[] for j in range(len(non_bg_idx))]
             for j in range(len(non_bg_idx)):
                 for k in range(len(non_bg_idx)):
-                    final_dists[j].append(dists[i][non_bg_idx[j] * len(detections[i]) + non_bg_idx[k]])
+                    final_dists_x[j].append(dists_x[i][non_bg_idx[j] * len(detections[i]) + non_bg_idx[k]])
+                    final_dists_y[j].append(dists_y[i][non_bg_idx[j] * len(detections[i]) + non_bg_idx[k]])
                     final_coefs[j].append(coefs[i][non_bg_idx[j] * len(detections[i]) + non_bg_idx[k]])
+                    final_bias[j].append(bias[i][non_bg_idx[j] * len(detections[i]) + non_bg_idx[k]])
 
             results.append({
                 "rois": final_rois,
@@ -2668,8 +2690,10 @@ class MaskRCNN():
                 "second_scores": final_second_scores,
                 "masks": final_masks,
                 "probs": mrcnn_class,
-                "dists": final_dists,
-                "coefs": final_coefs
+                "dists_x": final_dists_x,
+                "dists_y": final_dists_y,
+                "coefs": final_coefs,
+                "bias": final_bias
             })
         return results
 

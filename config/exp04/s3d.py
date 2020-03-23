@@ -138,6 +138,21 @@ class S3DDataset(utils.Dataset):
                 for j in range(S3DConfig.NUM_CLASSES):
                     rel[i, j] = inputs[j]
         return rel
+
+    def load_rel_bias(self):
+        """
+            Load the relation bias.
+
+            Returns:
+            bias:  [41, 41]
+        """
+        rel = np.zeros((S3DConfig.NUM_CLASSES, S3DConfig.NUM_CLASSES))
+        with open(os.path.join(meta_path, 'relation/bias.txt'), 'r') as fin:
+            for i, l in enumerate(fin):
+                inputs = [float(x) for x in l.split()]
+                for j in range(S3DConfig.NUM_CLASSES):
+                    rel[i, j] = inputs[j]
+        return rel
         
 if __name__ == '__main__':
     pass

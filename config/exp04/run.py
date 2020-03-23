@@ -87,7 +87,7 @@ def test(model, config, limit = None, savefiledir = None):
             if i >= int(limit):
                 continue
         image, meta, gt_class_ids, gt_bbox, gt_mask = modellib.load_image_gt(dataset_test, config, i)
-        result = model.detect([image], dataset_test.load_rel_coefs(), verbose=0)[0]
+        result = model.detect([image], dataset_test.load_rel_coefs(), dataset_test.load_rel_bias(), verbose=0)[0]
 
         bbox = result['rois']
         mask = result['masks']
@@ -96,27 +96,29 @@ def test(model, config, limit = None, savefiledir = None):
         second_class_ids = result['second_class_ids']
         second_scores = result['second_scores']
         probs = result['probs'][0]
-        dists = result['dists']
+        dists_x = result['dists_x']
+        dists_y = result['dists_y']
         coefs = result['coefs']
+        bias = result['bias']
 
-        def drawfig():
-            fig = plt.figure(figsize=(16, 16))
+        # def drawfig():
+        #     fig = plt.figure(figsize=(16, 16))
 
-            ax = fig.add_subplot(221)
-            im = ax.imshow(dists + 2 * np.eye(len(dists)), cmap='Blues', interpolation='none', vmin=0, vmax=2, aspect='equal')
-            plt.colorbar(im, shrink=0.5)
+        #     ax = fig.add_subplot(221)
+        #     im = ax.imshow(dists + 2 * np.eye(len(dists)), cmap='Blues', interpolation='none', vmin=0, vmax=2, aspect='equal')
+        #     plt.colorbar(im, shrink=0.5)
 
-            ax = fig.add_subplot(222)
-            im = ax.imshow(coefs, cmap='Reds', interpolation='none', vmin=0, aspect='equal')
-            plt.colorbar(im, shrink=0.5)
+        #     ax = fig.add_subplot(222)
+        #     im = ax.imshow(coefs, cmap='Reds', interpolation='none', vmin=0, aspect='equal')
+        #     plt.colorbar(im, shrink=0.5)
 
-            ax = fig.add_subplot(223)
-            im = ax.imshow((1. / np.exp(dists + 2*np.eye(len(dists)))) * (1. / np.exp(coefs)), cmap='Greens', interpolation='none', vmin=0, aspect='equal')
-            plt.colorbar(im, shrink=0.5)
+        #     ax = fig.add_subplot(223)
+        #     im = ax.imshow((1. / np.exp(dists + 2*np.eye(len(dists)))) * (1. / np.exp(coefs)), cmap='Greens', interpolation='none', vmin=0, aspect='equal')
+        #     plt.colorbar(im, shrink=0.5)
 
-            plt.savefig('fig.jpg')
+        #     plt.savefig('fig.jpg')
 
-        drawfig()
+        # drawfig()
 
         # @timer
         def secondClassResults():
