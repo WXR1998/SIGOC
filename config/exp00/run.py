@@ -29,6 +29,7 @@ import visualize
 
 COCO_PATH = '/home/xuanrun/Scene/logs/coco/mask_rcnn_coco.h5'
 
+save_visual_path = '/home/xuanrun/Scene/logs/exp00/visual/'
 config = None
 
 ############################################################
@@ -112,6 +113,14 @@ def test(model, config, limit = None, savefiledir = None):
         # print(mask.shape, gt_mask.shape)
         # print(class_ids.shape, gt_class_ids.shape)
         # print(scores.shape)
+
+        def savefig():
+            visualize.display_instances(image, gt_bbox, gt_mask, gt_class_ids, 
+                [categories.category2name(i) for i in range(categories.cate_cnt)], 
+                savefilename=os.path.join(save_visual_path, '%05d_gt.jpg' % i))
+            visualize.display_instances(image, bbox, mask, class_ids, 
+                [categories.category2name(i) for i in range(categories.cate_cnt)], 
+                savefilename=os.path.join(save_visual_path, '%05d_pred.jpg' % i))
         
         # @timer
         def secondClassResults():
@@ -140,10 +149,11 @@ def test(model, config, limit = None, savefiledir = None):
             # visualize.display_instances_second_class(image, bbox, mask, class_ids, second_class_ids, [categories.category2name(i) for i in range(categories.cate_cnt)], scores, second_scores, savefilename=os.path.join(savefiledir, 'visual', '%05d_B.jpg' % i))
 
         basicResults()
-        secondClassResults()
+        # secondClassResults()
+        savefig()
 
     
-    print('%.3f, %.3f' % (np.mean(APs1), np.mean(APs2)))
+    print('%.3f' % np.mean(APs1))
 
 ############################################################
 #  Main Script

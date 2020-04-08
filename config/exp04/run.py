@@ -28,6 +28,7 @@ import utils
 import visualize
 
 COCO_PATH = '/home/xuanrun/Scene/logs/coco/mask_rcnn_coco.h5'
+save_visual_path = '/home/xuanrun/Scene/logs/exp04/visual/'
 
 config = None
 
@@ -101,25 +102,31 @@ def test(model, config, limit = None, savefiledir = None):
         coefs = result['coefs']
         bias = result['bias']
 
-        # def drawfig():
-        #     fig = plt.figure(figsize=(16, 16))
+        def drawfig():
+            # 画loss热力图
+            fig = plt.figure(figsize=(16, 16))
 
-        #     ax = fig.add_subplot(221)
-        #     im = ax.imshow(dists + 2 * np.eye(len(dists)), cmap='Blues', interpolation='none', vmin=0, vmax=2, aspect='equal')
-        #     plt.colorbar(im, shrink=0.5)
+            ax = fig.add_subplot(221)
+            im = ax.imshow(dists + 2 * np.eye(len(dists)), cmap='Blues', interpolation='none', vmin=0, vmax=2, aspect='equal')
+            plt.colorbar(im, shrink=0.5)
 
-        #     ax = fig.add_subplot(222)
-        #     im = ax.imshow(coefs, cmap='Reds', interpolation='none', vmin=0, aspect='equal')
-        #     plt.colorbar(im, shrink=0.5)
+            ax = fig.add_subplot(222)
+            im = ax.imshow(coefs, cmap='Reds', interpolation='none', vmin=0, aspect='equal')
+            plt.colorbar(im, shrink=0.5)
 
-        #     ax = fig.add_subplot(223)
-        #     im = ax.imshow((1. / np.exp(dists + 2*np.eye(len(dists)))) * (1. / np.exp(coefs)), cmap='Greens', interpolation='none', vmin=0, aspect='equal')
-        #     plt.colorbar(im, shrink=0.5)
+            ax = fig.add_subplot(223)
+            im = ax.imshow((1. / np.exp(dists + 2*np.eye(len(dists)))) * (1. / np.exp(coefs)), cmap='Greens', interpolation='none', vmin=0, aspect='equal')
+            plt.colorbar(im, shrink=0.5)
 
-        #     plt.savefig('fig.jpg')
+            plt.savefig('fig.jpg')
 
-        # drawfig()
-
+        def savefig():
+            visualize.display_instances(image, gt_bbox, gt_mask, gt_class_ids, 
+                [categories.category2name(i) for i in range(categories.cate_cnt)], 
+                savefilename=os.path.join(save_visual_path, '%05d_gt.jpg' % i))
+            visualize.display_instances(image, bbox, mask, class_ids, 
+                [categories.category2name(i) for i in range(categories.cate_cnt)], 
+                savefilename=os.path.join(save_visual_path, '%05d_pred.jpg' % i))
         # @timer
         def secondClassResults():
             # 基础的结果
@@ -147,12 +154,13 @@ def test(model, config, limit = None, savefiledir = None):
             # visualize.display_instances_second_class(image, bbox, mask, class_ids, second_class_ids, [categories.category2name(i) for i in range(categories.cate_cnt)], scores, second_scores, savefilename=os.path.join(savefiledir, 'visual', '%05d_B.jpg' % i))
 
         basicResults()
-        secondClassResults()
+        # secondClassResults()
+        savefig()
 
         # exit(0)
 
     
-    print('%.3f, %.3f' % (np.mean(APs1), np.mean(APs2)))
+    print('%.3f' % np.mean(APs1))
 
 ############################################################
 #  Main Script

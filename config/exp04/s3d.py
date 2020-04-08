@@ -6,6 +6,7 @@ import imgaug
 import shutil
 import skimage.io as io
 import json
+from collections import OrderedDict
 
 ROOT_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../')
 sys.path.append(ROOT_DIR)

@@ -5,6 +5,7 @@ import argparse
 import tqdm
 import numpy as np
 import skimage.io as io
+from collections import OrderedDict
 
 try:
     import categories
@@ -17,12 +18,12 @@ except:
 def load_fileinfo():
     with open(osp.join(meta_path, 'fileinfo.json'), 'r') as f:
         ret = json.load(f)
-    di = {}
-    for scene in ret:
-        di[int(scene)] = {}
-        for room in ret[scene]:
+    di = OrderedDict()
+    for scene in sorted([int(t) for t in ret]):
+        di[int(scene)] = OrderedDict()
+        for room in sorted([int(t) for t in ret[str(scene)]]):
             di[int(scene)][int(room)] = []
-            for position in ret[scene][room]:
+            for position in sorted([int(t) for t in ret[str(scene)][str(room)]]):
                 di[int(scene)][int(room)].append(position)
     return di
 

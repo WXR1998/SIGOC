@@ -1282,7 +1282,7 @@ def mrcnn_rel_loss_graph(dists_x, dists_y, coefs, bias):
     # 对于X方向上的距离，和exp03的处理方法相同
     # 对于Y方向上的距离，先判断他们的上/下关系
     
-    loss = K.mean((1.0/(tf.exp(dists_X_mdf + dists_Y_mdf) + 0.5 * tf.exp(dists_y * bias))) * (1.0/tf.exp(coefs)))
+    loss = K.mean( coefs * (tf.exp(dists_X_mdf + dists_Y_mdf) + 2.0 * tf.exp(- dists_y * bias)) )
     return loss
 
 ############################################################
