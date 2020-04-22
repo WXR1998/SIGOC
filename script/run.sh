@@ -8,5 +8,5 @@ then
     echo "参数数量不够"
 else
     export CUDA_VISIBLE_DEVICES=$4
-    python3.4 $SHELL_FOLDER/../config/$1/run.py $2 --weights=$3 --limit=1000
+    python3.4 $SHELL_FOLDER/../config/$1/run.py $2 --weights=$3 
 fi

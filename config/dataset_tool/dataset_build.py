@@ -130,7 +130,53 @@ def category_coordinate():
         with open(osp.join(args.meta_path, 'relation', '%d.json'%i), 'w') as fout:
             json.dump(result[i], fout, indent=4)
 
+def category_coordinate_depth():
+    # 用深度信息获取类别之间的距离关系
+    # 距离已归一化处理
+    # avgdep = 2500 深度 维度2
+    # avgx = 640    水平 维度1
+    # avgy = 360    垂直 维度0
+    fileinfo = load_fileinfo()
+    result = [{str(j): [] for j in range(41)} for i in range(41)]
+    t = 0
+    count = 0
+    for scene in fileinfo:
+        print(scene)
+        scene_path = osp.join(args.path, 'scene_%05d'%scene)
+        with open(osp.join(scene_path, 'idcate_map.json'), 'r') as fin:
+            idcate = json.load(fin)
+        for room in fileinfo[scene]:
+            for position in fileinfo[scene][room]:
+                full_path = osp.join(args.path, 'scene_%05d'%scene, '2D_rendering', str(room), 'perspective', 'full', str(position))
+                with open(osp.join(full_path, 'bbox_2d.json'), 'r') as fin:
+                    bbox_2d = json.load(fin)
+                dep = io.imread(osp.join(full_path, 'depth.png'))
+
+                for bboxAid in bbox_2d:
+                    for bboxBid in bbox_2d:
+                        if bboxAid != bboxBid:
+                            try:
+                                cateA = int(idcate[bboxAid])
+                                cateB = int(idcate[bboxBid])
+                                bboxA = bbox_2d[bboxAid]
+                                bboxB = bbox_2d[bboxBid]
+                                cenA = [(int(bboxA[0])+int(bboxA[2])) // 2, (int(bboxA[1])+int(bboxA[3])) // 2]
+                                cenB = [(int(bboxB[0])+int(bboxB[2])) // 2, (int(bboxB[1])+int(bboxB[3])) // 2]
+                                depA = float(min(dep[cenA[0], cenA[1]], 8000))
+                                depB = float(min(dep[cenB[0], cenB[1]], 8000))
+
+                                result[cateA][str(cateB)].append([float(cenA[0] - cenB[0]) / 360, float(cenA[1] - cenB[1]) / 640, float(depA - depB) / 2500])
+                            except Exception as e:
+                                print('Exception', e)
+                                continue
+
+    for i in range(41):
+        with open(osp.join(args.meta_path, 'relation_depth', '%d.json'%i), 'w') as fout:
+            json.dump(result[i], fout, indent=4)
+
+
 if __name__ == '__main__':
     # normal_pic()
     # fail_pic()
-    category_coordinate()
+    # category_coordinate()
+    category_coordinate_depth()

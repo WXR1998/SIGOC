@@ -44,6 +44,7 @@ def load_image(scene, room, position):
         idcatemap = json.load(fin)
     with open(osp.join(full_path, 'bbox_2d.json'), 'r') as fin:
         bbox2d = json.load(fin)
+    dep = io.imread(osp.join(full_path, 'depth.png'))
 
     res = {}
     res['rgb'] = rgb
@@ -53,6 +54,7 @@ def load_image(scene, room, position):
     res['bbox2d'] = bbox2d
     res['idcatemap'] = idcatemap
     res['full_path'] = full_path
+    res['depth'] = dep
     return res
 
 '''
