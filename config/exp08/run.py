@@ -28,8 +28,8 @@ import utils
 import visualize
 
 COCO_PATH = '/home/xuanrun/Scene/logs/coco/mask_rcnn_coco.h5'
-save_visual_path = '/home/xuanrun/Scene/logs/exp04/visual/'
 
+save_visual_path = '/home/xuanrun/Scene/logs/exp00/visual/'
 config = None
 
 ############################################################
@@ -69,6 +69,12 @@ def train(model):
         layers='all',
         augmentation=augmentation)
 
+    model.train(dataset_train, dataset_val, 
+        learning_rate=config.LEARNING_RATE / 10,
+        epochs=1000,
+        layers='all',
+        augmentation=augmentation)
+
 ############################################################
 #  Evaluation Tools
 ############################################################
@@ -88,7 +94,7 @@ def test(model, config, limit = None, savefiledir = None):
             if i >= int(limit):
                 continue
         image, meta, gt_class_ids, gt_bbox, gt_mask = modellib.load_image_gt(dataset_test, config, i)
-        result = model.detect([image], dataset_test.load_rel_coefs(), dataset_test.load_rel_bias(), verbose=0)[0]
+        result = model.detect([image], verbose=0)[0]
 
         bbox = result['rois']
         mask = result['masks']
@@ -97,28 +103,16 @@ def test(model, config, limit = None, savefiledir = None):
         second_class_ids = result['second_class_ids']
         second_scores = result['second_scores']
         probs = result['probs'][0]
-        dists_x = result['dists_x']
-        dists_y = result['dists_y']
-        coefs = result['coefs']
-        bias = result['bias']
 
-        def drawfig():
-            # 画loss热力图
-            fig = plt.figure(figsize=(16, 16))
+        # print(class_ids)
+        # print(second_class_ids)
+        # print(scores)
+        # print(second_scores)
 
-            ax = fig.add_subplot(221)
-            im = ax.imshow(dists + 2 * np.eye(len(dists)), cmap='Blues', interpolation='none', vmin=0, vmax=2, aspect='equal')
-            plt.colorbar(im, shrink=0.5)
-
-            ax = fig.add_subplot(222)
-            im = ax.imshow(coefs, cmap='Reds', interpolation='none', vmin=0, aspect='equal')
-            plt.colorbar(im, shrink=0.5)
-
-            ax = fig.add_subplot(223)
-            im = ax.imshow((1. / np.exp(dists + 2*np.eye(len(dists)))) * (1. / np.exp(coefs)), cmap='Greens', interpolation='none', vmin=0, aspect='equal')
-            plt.colorbar(im, shrink=0.5)
-
-            plt.savefig('fig.jpg')
+        # print(bbox.shape, gt_bbox.shape)
+        # print(mask.shape, gt_mask.shape)
+        # print(class_ids.shape, gt_class_ids.shape)
+        # print(scores.shape)
 
         def savefig():
             visualize.display_instances(image, gt_bbox, gt_mask, gt_class_ids, 
@@ -127,6 +121,7 @@ def test(model, config, limit = None, savefiledir = None):
             visualize.display_instances(image, bbox, mask, class_ids, 
                 [categories.category2name(i) for i in range(categories.cate_cnt)], 
                 savefilename=os.path.join(save_visual_path, '%05d_pred.jpg' % i))
+        
         # @timer
         def secondClassResults():
             # 基础的结果
@@ -156,8 +151,6 @@ def test(model, config, limit = None, savefiledir = None):
         basicResults()
         # secondClassResults()
         # savefig()
-
-        # exit(0)
 
     
     print('%.3f' % np.mean(APs1))

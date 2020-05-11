@@ -1256,7 +1256,7 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
     loss = K.switch(tf.size(y_true) > 0,
                     K.binary_crossentropy(target=y_true, output=y_pred),
                     tf.constant(0.0))
-    loss = K.mean(loss) * 0.0           # disable mask
+    loss = K.mean(loss)
     return loss
 
 def mrcnn_rel_loss_graph(dists_x, dists_y, coefs, bias):
@@ -1282,7 +1282,7 @@ def mrcnn_rel_loss_graph(dists_x, dists_y, coefs, bias):
     # 对于X方向上的距离，和exp03的处理方法相同
     # 对于Y方向上的距离，先判断他们的上/下关系
     
-    loss = K.mean((1.0/(tf.exp(dists_X_mdf + dists_Y_mdf) + tf.exp(dists_y * bias))) * (1.0/tf.exp(coefs)))
+    loss = K.mean((1.0/(tf.exp(dists_X_mdf + dists_Y_mdf) + 0.5 * tf.exp(dists_y * bias))) * (1.0/tf.exp(coefs)))
     return loss
 
 ############################################################

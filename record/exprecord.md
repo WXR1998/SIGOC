@@ -65,4 +65,17 @@ scale 10, 2.0: 0.524
 
 ## exp07 : exp04
 
-禁用Mask分支，不考虑Mask的影响
+禁用Mask分支的exp04
+
+scale 3, 1.0: 0.599
+
+## exp08 : exp00
+
+禁用Mask分支的baseline
+
+0.590
+
+## exp09 : exp04
+
+修改rel的计算方法。 注意，dist y轴 应该是第0维
+scale 3: 0.530

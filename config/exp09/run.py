@@ -155,7 +155,7 @@ def test(model, config, limit = None, savefiledir = None):
 
         basicResults()
         # secondClassResults()
-        # savefig()
+        savefig()
 
         # exit(0)
 
