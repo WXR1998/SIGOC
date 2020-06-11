@@ -82,85 +82,83 @@ def test(model, config, limit = None, savefiledir = None):
 
     APs1, APs2 = [], []
 
-    import tqdm
-    for i in tqdm.tqdm(range(len(dataset_test.image_info))):
-        if limit is not None:
-            if i >= int(limit):
-                continue
-        image, meta, gt_class_ids, gt_bbox, gt_mask = modellib.load_image_gt(dataset_test, config, i)
-        result = model.detect([image], dataset_test.load_rel_coefs(), dataset_test.load_rel_bias(), verbose=0)[0]
+    with open('details_04.txt', 'w') as fout:
 
-        bbox = result['rois']
-        mask = result['masks']
-        class_ids = result['class_ids']
-        scores = result['scores']
-        second_class_ids = result['second_class_ids']
-        second_scores = result['second_scores']
-        probs = result['probs'][0]
-        dists_x = result['dists_x']
-        dists_y = result['dists_y']
-        coefs = result['coefs']
-        bias = result['bias']
+        import tqdm
+        for i in tqdm.tqdm(range(len(dataset_test.image_info))):
+            if limit is not None:
+                if i >= int(limit):
+                    continue
+            image, meta, gt_class_ids, gt_bbox, gt_mask = modellib.load_image_gt(dataset_test, config, i)
+            result = model.detect([image], dataset_test.load_rel_coefs(), dataset_test.load_rel_bias(), verbose=0)[0]
 
-        def drawfig():
-            # 画loss热力图
-            fig = plt.figure(figsize=(16, 16))
+            bbox = result['rois']
+            mask = result['masks']
+            class_ids = result['class_ids']
+            scores = result['scores']
+            second_class_ids = result['second_class_ids']
+            second_scores = result['second_scores']
+            probs = result['probs'][0]
+            dists_x = result['dists_x']
+            dists_y = result['dists_y']
+            coefs = result['coefs']
+            bias = result['bias']
 
-            ax = fig.add_subplot(221)
-            im = ax.imshow(dists + 2 * np.eye(len(dists)), cmap='Blues', interpolation='none', vmin=0, vmax=2, aspect='equal')
-            plt.colorbar(im, shrink=0.5)
+            def drawfig():
+                # 画loss热力图
+                fig = plt.figure(figsize=(16, 16))
 
-            ax = fig.add_subplot(222)
-            im = ax.imshow(coefs, cmap='Reds', interpolation='none', vmin=0, aspect='equal')
-            plt.colorbar(im, shrink=0.5)
+                ax = fig.add_subplot(221)
+                im = ax.imshow(dists + 2 * np.eye(len(dists)), cmap='Blues', interpolation='none', vmin=0, vmax=2, aspect='equal')
+                plt.colorbar(im, shrink=0.5)
 
-            ax = fig.add_subplot(223)
-            im = ax.imshow((1. / np.exp(dists + 2*np.eye(len(dists)))) * (1. / np.exp(coefs)), cmap='Greens', interpolation='none', vmin=0, aspect='equal')
-            plt.colorbar(im, shrink=0.5)
+                ax = fig.add_subplot(222)
+                im = ax.imshow(coefs, cmap='Reds', interpolation='none', vmin=0, aspect='equal')
+                plt.colorbar(im, shrink=0.5)
 
-            plt.savefig('fig.jpg')
+                ax = fig.add_subplot(223)
+                im = ax.imshow((1. / np.exp(dists + 2*np.eye(len(dists)))) * (1. / np.exp(coefs)), cmap='Greens', interpolation='none', vmin=0, aspect='equal')
+                plt.colorbar(im, shrink=0.5)
 
-        def savefig():
-            visualize.display_instances(image, gt_bbox, gt_mask, gt_class_ids, 
-                [categories.category2name(i) for i in range(categories.cate_cnt)], 
-                savefilename=os.path.join(save_visual_path, '%05d_gt.jpg' % i))
-            visualize.display_instances(image, bbox, mask, class_ids, 
-                [categories.category2name(i) for i in range(categories.cate_cnt)], 
-                savefilename=os.path.join(save_visual_path, '%05d_pred.jpg' % i))
-        # @timer
-        def secondClassResults():
-            # 基础的结果
-            basemAP, precisions, recalls, overlaps = utils.compute_ap(gt_bbox, gt_class_ids, gt_mask, bbox, class_ids, scores, mask)
-            delta = 0.0
+                plt.savefig('fig.jpg')
 
-            # 计入概率次高分类之后的结果
-            for i in range(len(class_ids)):
-                ori = class_ids[i]
-                class_ids[i] = second_class_ids[i]
-                mAP, precisions, recalls, overlaps = utils.compute_ap(gt_bbox, gt_class_ids, gt_mask, bbox, class_ids, scores, mask)
-                class_ids[i] = ori
-                if mAP - basemAP > 0:
-                    delta += mAP - basemAP
+            def savefig():
+                visualize.display_instances(image, gt_bbox, gt_mask, gt_class_ids, 
+                    [categories.category2name(i) for i in range(categories.cate_cnt)], 
+                    savefilename=os.path.join(save_visual_path, '%05d_gt.jpg' % i))
+                visualize.display_instances(image, bbox, mask, class_ids, 
+                    [categories.category2name(i) for i in range(categories.cate_cnt)], 
+                    savefilename=os.path.join(save_visual_path, '%05d_pred.jpg' % i))
+            # @timer
+            def secondClassResults():
+                # 基础的结果
+                basemAP, precisions, recalls, overlaps = utils.compute_ap(gt_bbox, gt_class_ids, gt_mask, bbox, class_ids, scores, mask)
+                delta = 0.0
 
-            if basemAP >= 0 and basemAP <= 1:
-                APs2.append(basemAP + delta)
+                # 计入概率次高分类之后的结果
+                for i in range(len(class_ids)):
+                    ori = class_ids[i]
+                    class_ids[i] = second_class_ids[i]
+                    mAP, precisions, recalls, overlaps = utils.compute_ap(gt_bbox, gt_class_ids, gt_mask, bbox, class_ids, scores, mask)
+                    class_ids[i] = ori
+                    if mAP - basemAP > 0:
+                        delta += mAP - basemAP
+
+                if basemAP >= 0 and basemAP <= 1:
+                    APs2.append(basemAP + delta)
+            
+            # @timer
+            def basicResults():
+                basemAP, precisions, recalls, overlaps = utils.compute_ap(gt_bbox, gt_class_ids, gt_mask, bbox, class_ids, scores, mask)
+                if basemAP >= 0 and basemAP <= 1:
+                    APs1.append(basemAP)
+                fout.write('%d %f\n' % (i, basemAP))
+                # visualize.display_instances(image, gt_bbox, gt_mask, gt_class_ids, [categories.category2name(i) for i in range(categories.cate_cnt)], savefilename=os.path.join(savefiledir, 'visual', '%05d_A.jpg' % i))
+                # visualize.display_instances_second_class(image, bbox, mask, class_ids, second_class_ids, [categories.category2name(i) for i in range(categories.cate_cnt)], scores, second_scores, savefilename=os.path.join(savefiledir, 'visual', '%05d_B.jpg' % i))
+
+            basicResults()
         
-        # @timer
-        def basicResults():
-            basemAP, precisions, recalls, overlaps = utils.compute_ap(gt_bbox, gt_class_ids, gt_mask, bbox, class_ids, scores, mask)
-            if basemAP >= 0 and basemAP <= 1:
-                APs1.append(basemAP)
-            # visualize.display_instances(image, gt_bbox, gt_mask, gt_class_ids, [categories.category2name(i) for i in range(categories.cate_cnt)], savefilename=os.path.join(savefiledir, 'visual', '%05d_A.jpg' % i))
-            # visualize.display_instances_second_class(image, bbox, mask, class_ids, second_class_ids, [categories.category2name(i) for i in range(categories.cate_cnt)], scores, second_scores, savefilename=os.path.join(savefiledir, 'visual', '%05d_B.jpg' % i))
-
-        basicResults()
-        # secondClassResults()
-        savefig()
-
-        # exit(0)
-
-    
-    print('%.3f' % np.mean(APs1))
+        print('%.3f' % np.mean(APs1))
 
 ############################################################
 #  Main Script

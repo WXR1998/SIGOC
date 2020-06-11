@@ -79,3 +79,29 @@ scale 3, 1.0: 0.599
 
 修改rel的计算方法。 注意，dist y轴 应该是第0维
 scale 3: 0.530
+
+## exp10 : exp04
+
+取子集之后，写进论文的运算结果。
+
+新算法      0.571
+Baseline    0.538
+alpha 0     0.567
+无上下bias  0.568
+无距离rels  0.566
+alpha 2     0.566
+alpha 5     0.568
+深度        0.547
+
+faster-ours 0.626
+faster-baseline 0.589
+
+
+
+Baseline    0.567        全集0.535
+
+
+## 取子集
+
+Baseline:   0.538
+Ours:       0.589

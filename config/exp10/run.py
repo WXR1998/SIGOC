@@ -28,7 +28,7 @@ import utils
 import visualize
 
 COCO_PATH = '/home/xuanrun/Scene/logs/coco/mask_rcnn_coco.h5'
-save_visual_path = '/home/xuanrun/Scene/logs/exp04/visual/'
+# save_visual_path = '/home/xuanrun/Scene/logs/exp04/visual/'
 
 config = None
 
@@ -93,6 +93,7 @@ def test(model, config, limit = None, savefiledir = None):
                 continue
         if i not in subset:
             continue
+
         image, meta, gt_class_ids, gt_bbox, gt_mask = modellib.load_image_gt(dataset_test, config, i)
         result = model.detect([image], dataset_test.load_rel_coefs(), dataset_test.load_rel_bias(), verbose=0)[0]
 
@@ -156,15 +157,8 @@ def test(model, config, limit = None, savefiledir = None):
             basemAP, precisions, recalls, overlaps = utils.compute_ap(gt_bbox, gt_class_ids, gt_mask, bbox, class_ids, scores, mask)
             if basemAP >= 0 and basemAP <= 1:
                 APs1.append(basemAP)
-            # visualize.display_instances(image, gt_bbox, gt_mask, gt_class_ids, [categories.category2name(i) for i in range(categories.cate_cnt)], savefilename=os.path.join(savefiledir, 'visual', '%05d_A.jpg' % i))
-            # visualize.display_instances_second_class(image, bbox, mask, class_ids, second_class_ids, [categories.category2name(i) for i in range(categories.cate_cnt)], scores, second_scores, savefilename=os.path.join(savefiledir, 'visual', '%05d_B.jpg' % i))
 
         basicResults()
-        # secondClassResults()
-        # savefig()
-
-        # exit(0)
-
     
     print('%.3f' % np.mean(APs1))
 
